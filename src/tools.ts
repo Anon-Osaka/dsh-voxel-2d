@@ -131,7 +131,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
     name: 'voxel_world_init',
     description: '创建/重置体素世界。世界是 W×H×D 的立方体网格：x∈[0,W)，y∈[0,H)（y 向上），z∈[0,D)。可同时载入实验演示结构。之后所有 voxel_* 工具都作用于这个世界。',
     parameters: {
-      size: { type: 'integer', description: '边长（4..16，缺省 8，即 8×8×8）' },
+      size: { type: 'integer', description: '边长（4..64，缺省 8，即 8×8×8；32×32 地形沙盘用 32）' },
       name: { type: 'string', description: '世界名（缺省 "world"）' },
       demo: { type: 'string', description: '可选演示结构: house（80 块小屋）/ tower（127 块楼梯塔）/ chimney-house（83 块小屋+烟囱）' },
       type: { type: 'string', description: '演示方块类型（缺省 stone）' },
@@ -149,7 +149,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: value.note + '\n' + renderSummary(value.summary) }],
     },
     async execute(args: { size?: number; name?: string; demo?: string; type?: string }) {
-      const size = Math.max(4, Math.min(16, Math.floor(args.size ?? 8)))
+      const size = Math.max(4, Math.min(64, Math.floor(args.size ?? 8)))
       world.clear()
       world.name = (args.name ?? 'world').slice(0, 40)
       if (args.size !== undefined) world.resize(size, size, size)

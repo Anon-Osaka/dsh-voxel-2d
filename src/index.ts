@@ -32,7 +32,7 @@ export interface Config {
 }
 
 export const Config = z.object({
-  size: z.number().min(4).max(16).default(8),
+  size: z.number().min(4).max(64).default(8),
   demo: z.string().default('house'),
   worldName: z.string().default('voxel-workbench'),
   apiPrefix: z.string().default('/@dsh-external/dsh-voxel-2d/api'),
@@ -151,6 +151,20 @@ export function apply(ctx: AppContext, config: Config): void {
               }
               return send(res, 200, { ok: true, placed, cleared, state: stateOf() })
             }
+            if (path === 'coords') {
+              // 批量导入：coords: [[x,y,z,type?], ...]（一次调用，类型可逐块不同）
+              const list = Array.isArray(body.coords) ? body.coords : []
+              let n = 0
+              for (const c of list) {
+                if (!Array.isArray(c) || c.length < 3) continue
+                const x = Number(c[0])
+                const y = Number(c[1])
+                const z = Number(c[2])
+                const t = c.length >= 4 && c[3] ? String(c[3]) : 'stone'
+                if (world.set(x, y, z, t)) n++
+              }
+              return send(res, 200, { ok: true, imported: n, state: stateOf() })
+            }
             if (path === 'gravity') {
               const types = String(body.type ?? 'sand').split(',').map((t) => t.trim()).filter(Boolean)
               const moved = world.applyGravity(types.length > 0 ? types : ['sand'])
@@ -186,7 +200,7 @@ export function apply(ctx: AppContext, config: Config): void {
               return send(res, 200, { ok: true, state: stateOf() })
             }
             if (path === 'resize') {
-              const s = Math.max(4, Math.min(16, Number(body.size) || 8))
+              const s = Math.max(4, Math.min(64, Number(body.size) || 8))
               world.resize(s, s, s)
               return send(res, 200, { ok: true, state: stateOf() })
             }

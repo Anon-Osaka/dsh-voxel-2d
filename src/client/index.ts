@@ -36,14 +36,8 @@ const MOUNTED = new WeakSet<HTMLElement>()
 
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.slots.inject('conversation.view', () =>
-    ctx.slots.register(
-      {
-        name: 'conversation.view',
-        id: 'dsh-voxel-2d-panel',
-        label: '🧊 体素工作台',
-        order: 20,
-      },
-      () => React.createElement('div', {
+    ctx.slots.register({ name: 'conversation.view', id: 'dsh-voxel-2d-panel', label: '🧊 体素工作台', order: 20 }, () =>
+      React.createElement('div', {
         style: { padding: '12px 16px' },
         ref: (el: HTMLDivElement | null) => {
           if (el && !MOUNTED.has(el)) {
