@@ -121,7 +121,13 @@ function renderSummary(s: Summary): string {
   return summaryText(s)
 }
 
-export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array<() => void> {
+export interface WorldManager {
+  getWorld(): VoxelWorld
+  listWorlds(): { names: string[]; current: string; sizes: Record<string, { x: number; y: number; z: number }> }
+  switchWorld(name: string, create?: { w?: number; h?: number; d?: number }): VoxelWorld | null
+}
+
+export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array<() => void> {
   const disposers: Array<() => void> = []
   const reg = (def: ReturnType<typeof defineTool>): void => {
     disposers.push(tools.register(def))
@@ -149,6 +155,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: value.note + '\n' + renderSummary(value.summary) }],
     },
     async execute(args: { size?: number; name?: string; demo?: string; type?: string }) {
+      const world = mgr.getWorld()
       const size = Math.max(4, Math.min(64, Math.floor(args.size ?? 8)))
       world.clear()
       world.name = (args.name ?? 'world').slice(0, 40)
@@ -187,6 +194,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: value.note + '\n' + renderSummary(value.summary) }],
     },
     async execute(args: { demo: string; type?: string }) {
+      const world = mgr.getWorld()
       const d = DEMOS[args.demo]
       if (!d) {
         throw new Error('未知演示: ' + args.demo + '（可选: house / tower / chimney-house）')
@@ -219,6 +227,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: 'y=' + value.y + '（填充 ' + value.filled + ' 格）\n' + gridText(value.rows) + '\n' + value.legend }],
     },
     execute: async (args: { y: number }) => {
+      const world = mgr.getWorld()
       const s = world.slices().find((l) => l.y === args.y)
       if (!s) throw new Error('层 ' + args.y + ' 超出世界高度 ' + world.size.y)
       const filled = s.rows.join('').split('').filter((c) => c === '#').length
@@ -249,6 +258,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: 'y=' + value.y + ' 层: 放置 ' + value.placed + ' 块，清除 ' + value.cleared + ' 块\n' + renderSummary(value.summary) }],
     },
     execute: async (args: { y: number; grid: string; type?: string }) => {
+      const world = mgr.getWorld()
       if (args.y < 0 || args.y >= world.size.y) throw new Error('层 ' + args.y + ' 超出世界高度 ' + world.size.y)
       const rows = parseGridRows(args.grid, world.size.x)
       if (rows.length === 0) throw new Error('grid 为空或格式错误（需要 #/. 组成的网格行）')
@@ -289,6 +299,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: '导入 ' + value.imported + ' 块（' + value.layers + ' 层）\n' + renderSummary(value.summary) }],
     },
     execute: async (args: { slices: string; type?: string }) => {
+      const world = mgr.getWorld()
       const parsed = parseSlices(args.slices)
       if (parsed.length === 0) throw new Error('未解析到任何层（需要 "yN:" 头 + #/. 网格行，或 JSON）')
       const imported = world.importSlices(parsed, args.type ?? 'stone')
@@ -317,6 +328,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: value.text }],
     },
     execute: async (args: { format?: string; max?: number }) => {
+      const world = mgr.getWorld()
       const coords = world.coords()
       const max = Math.max(1, Math.min(2000, Math.floor(args.max ?? 160)))
       const truncated = Math.max(0, coords.length - max)
@@ -356,21 +368,25 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
       render: (_args: unknown, value: {
         top: string[]; front: string[]; side: string[]; checked: { TOP: number; FRONT: number; SIDE: number }
         violations: number; violationList: string[]; doorAgree: string
-      }) => [
+      }) => {
+        const sz = mgr.getWorld().size
+        return [
         {
           type: 'text',
           text:
-            'TOP（行 z=' + (world.size.z - 1) + '→0，列 x）:\n' + gridText(value.top) + '\n' +
-            'FRONT（行 y=' + (world.size.y - 1) + '→0，列 x）:\n' + gridText(value.front) + '\n' +
-            'SIDE（行 y=' + (world.size.y - 1) + '→0，列 z）:\n' + gridText(value.side) + '\n' +
+            'TOP（行 z=' + (sz.z - 1) + '→0，列 x）:\n' + gridText(value.top) + '\n' +
+            'FRONT（行 y=' + (sz.y - 1) + '→0，列 x）:\n' + gridText(value.front) + '\n' +
+            'SIDE（行 y=' + (sz.y - 1) + '→0，列 z）:\n' + gridText(value.side) + '\n' +
             '一致性: 检查 TOP=' + value.checked.TOP + ' FRONT=' + value.checked.FRONT + ' SIDE=' + value.checked.SIDE +
             '，违规 ' + value.violations + ' 处' +
             (value.violationList.length > 0 ? '\n' + value.violationList.slice(0, 12).join('\n') : '') +
             '\n门洞一致性: ' + value.doorAgree,
         },
-      ],
+        ]
+      },
     },
     execute: async () => {
+      const world = mgr.getWorld()
       const views = world.projectViews()
       const c = world.checkConsistency()
       const vlist = c.violations.slice(0, 24).map((v) => v.view + '[' + v.cell.join(',') + ']: ' + v.reason)
@@ -407,6 +423,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
         [{ type: 'text', text: '重力: ' + value.moved + ' 块下落（' + value.before + ' → ' + value.after + ' 块）\n' + renderSummary(value.summary) }],
     },
     execute: async (args: { type?: string }) => {
+      const world = mgr.getWorld()
       const types = (args.type ?? 'sand').split(',').map((t) => t.trim()).filter(Boolean)
       const before = world.count()
       const moved = world.applyGravity(types.length > 0 ? types : ['sand'])
@@ -451,6 +468,7 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
       },
     },
     execute: async (args: { house?: boolean; autoFix?: boolean }) => {
+      const world = mgr.getWorld()
       const house = args.house !== false
       const report = world.validate(house)
       let fixes: string[] = []
@@ -490,7 +508,95 @@ export function registerVoxelTools(tools: ToolRuntime, world: VoxelWorld): Array
       },
       render: (_args: unknown, value: { text: string }) => [{ type: 'text', text: value.text }],
     },
-    execute: async () => ({ text: world.isoAscii() }),
+    execute: async () => ({ text: mgr.getWorld().isoAscii() }),
+  }))
+
+  reg(defineTool({
+    name: 'voxel_world_list',
+    description: '列出插件当前的全部体素世界（多世界工作流：分区制作 → 平移合成 → 分区域回验）。',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          worlds: { type: 'array', items: { type: 'string' } },
+          current: { type: 'string' },
+          sizes: { type: 'json' },
+        },
+      },
+      render: (_args: unknown, value: { worlds?: string[]; current?: string; sizes?: unknown }) =>
+        [{ type: 'text', text: '世界列表: ' + (value.worlds ?? []).join(', ') + '\n当前: ' + (value.current ?? '') + '\n尺寸: ' + JSON.stringify(value.sizes ?? {}) }],
+    },
+    execute: async () => {
+      const info = mgr.listWorlds()
+      return { worlds: info.names, current: info.current, sizes: info.sizes }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_world_switch',
+    description: '切换/创建体素世界（多世界工作流核心）：分区制作时每个区域一个世界，合成后切回主世界。create=true 时按 w/h/d 新建。',
+    parameters: {
+      name: { type: 'string', required: true, description: '世界名（如 region-a / main）' },
+      create: { type: 'boolean', description: '不存在时是否创建（缺省 false）' },
+      w: { type: 'integer', description: '创建时的宽（缺省 16；4..128）' },
+      h: { type: 'integer', description: '创建时的高（缺省 = w）' },
+      d: { type: 'integer', description: '创建时的深（缺省 = w）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          created: { type: 'boolean' },
+          summary: SUMMARY_SCHEMA,
+        },
+      },
+      render: (_args: unknown, value: { created: boolean; summary: Summary }) =>
+        [{ type: 'text', text: (value.created ? '已创建并切换' : '已切换') + '\n' + renderSummary(value.summary) }],
+    },
+    execute: async (args: { name: string; create?: boolean; w?: number; h?: number; d?: number }) => {
+      const before = mgr.listWorlds()
+      const w = mgr.switchWorld(args.name, args.create === true ? { w: args.w, h: args.h, d: args.d } : undefined)
+      if (!w) throw new Error('未知世界: ' + args.name + '（create=true 可新建；现有: ' + before.names.join(', ') + '）')
+      return { created: !before.names.includes(args.name), summary: summarize(w) }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_export_region',
+    description: '区域导出（分区域回验）：按 bbox 导出当前世界的子区域方块，可选 offset 平移（导出到新世界/验证区）。配合 voxel_world_switch + coords 导入实现"合成→切区回验"工作流。',
+    parameters: {
+      x0: { type: 'integer', required: true, description: '区域 x 下限' },
+      y0: { type: 'integer', required: true, description: '区域 y 下限' },
+      z0: { type: 'integer', required: true, description: '区域 z 下限' },
+      x1: { type: 'integer', required: true, description: '区域 x 上限' },
+      y1: { type: 'integer', required: true, description: '区域 y 上限' },
+      z1: { type: 'integer', required: true, description: '区域 z 上限' },
+      dx: { type: 'integer', description: '导出平移 x（缺省 0）' },
+      dy: { type: 'integer', description: '导出平移 y（缺省 0）' },
+      dz: { type: 'integer', description: '导出平移 z（缺省 0）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          count: { type: 'integer' },
+          text: { type: 'string' },
+        },
+      },
+      render: (_args: unknown, value: { count: number; text: string }) =>
+        [{ type: 'text', text: value.text }],
+    },
+    execute: async (args: { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; dx?: number; dy?: number; dz?: number }) => {
+      const world = mgr.getWorld()
+      const blocks = world.exportRegion(args.x0, args.y0, args.z0, args.x1, args.y1, args.z1, args.dx ?? 0, args.dy ?? 0, args.dz ?? 0)
+      const text = '导出区域 [' + args.x0 + ',' + args.y0 + ',' + args.z0 + ']..[' + args.x1 + ',' + args.y1 + ',' + args.z1 + '] 共 ' + blocks.length + ' 块' +
+        (blocks.length > 0 ? '\n' + blocks.slice(0, 120).map((b) => '[' + b.join(',') + ']').join('\n') + (blocks.length > 120 ? '\n…' : '') : '')
+      return { count: blocks.length, text }
+    },
   }))
 
   return disposers

@@ -68,7 +68,17 @@ export interface FixReport {
   after: number
 }
 
+/** 一条块变更（增量状态同步用） */
+export interface Mutation {
+  v: number
+  x: number
+  y: number
+  z: number
+  t: string | null
+}
+
 const DEFAULT_TYPE = 'stone'
+const MUTATION_CAP = 20000
 
 function keyOf(x: number, y: number, z: number): string {
   return x + ',' + y + ',' + z
@@ -92,6 +102,8 @@ export class VoxelWorld {
   name: string
   private blocks = new Map<string, string>()
   private ver = 0
+  /** 变更日志（环形，供增量状态同步：/state?since=N） */
+  private mutations: Mutation[] = []
 
   constructor(wx: number, wy: number, wz: number, name = 'world') {
     this.size = { x: wx, y: wy, z: wz }
@@ -100,6 +112,21 @@ export class VoxelWorld {
 
   get version(): number {
     return this.ver
+  }
+
+  /** 自 v 之后的变更（增量同步用） */
+  mutationsSince(v: number): { version: number; mutations: Mutation[] } {
+    return {
+      version: this.ver,
+      mutations: this.mutations.filter((m) => m.v > v),
+    }
+  }
+
+  private pushMutation(x: number, y: number, z: number, t: string | null): void {
+    this.mutations.push({ v: this.ver, x, y, z, t })
+    if (this.mutations.length > MUTATION_CAP) {
+      this.mutations.splice(0, this.mutations.length - MUTATION_CAP)
+    }
   }
 
   count(): number {
@@ -118,11 +145,13 @@ export class VoxelWorld {
       if (!this.blocks.has(k)) return false
       this.blocks.delete(k)
       this.ver++
+      this.pushMutation(x, y, z, null)
       return true
     }
     if (this.blocks.get(k) === type) return false
     this.blocks.set(k, type)
     this.ver++
+    this.pushMutation(x, y, z, type)
     return true
   }
 
@@ -161,6 +190,41 @@ export class VoxelWorld {
       if (this.set(x, y, z, type)) n++
     }
     return n
+  }
+
+  /** 平移导入：coords 加 [dx,dy,dz] 偏移后填入（分区合成主世界的核心原语）。 */
+  importCoordsOffset(
+    coords: Array<[number, number, number] | [number, number, number, string]>,
+    dx: number,
+    dy: number,
+    dz: number,
+  ): number {
+    let n = 0
+    for (const c of coords) {
+      const x = Number(c[0]) + dx
+      const y = Number(c[1]) + dy
+      const z = Number(c[2]) + dz
+      const t = c.length >= 4 && c[3] ? String(c[3]) : DEFAULT_TYPE
+      if (this.set(x, y, z, t)) n++
+    }
+    return n
+  }
+
+  /** 区域导出：bbox 内方块（可带平移 offset），返回 [x,y,z,type][]（分区域回验用）。 */
+  exportRegion(
+    x0: number, y0: number, z0: number,
+    x1: number, y1: number, z1: number,
+    dx = 0, dy = 0, dz = 0,
+  ): Array<[number, number, number, string]> {
+    const out: Array<[number, number, number, string]> = []
+    for (const k of this.blocks.keys()) {
+      const p = k.split(',').map(Number)
+      if (p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1 && p[2] >= z0 && p[2] <= z1) {
+        out.push([p[0] + dx, p[1] + dy, p[2] + dz, this.blocks.get(k) ?? DEFAULT_TYPE])
+      }
+    }
+    out.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0])
+    return out
   }
 
   coords(): Array<[number, number, number]> {
