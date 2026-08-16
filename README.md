@@ -23,7 +23,7 @@
 | `voxel_export_coords` | 导出 [x,y,z] 坐标表 | A · 直接 3D 坐标 |
 | `voxel_project_views` | TOP/FRONT/SIDE 正交投影 + 跨视图一致性 + 门洞一致性 | C · 正交三视图 |
 | `voxel_gravity` | 列式物理：指定类型（缺省 sand）方块下落压实 | 实验阶段 3 |
-| `voxel_validate` | 不变量校验：无支撑块/地板实心/门高≥2/室内空心 | 生成后校验器 |
+| `voxel_validate` | 不变量校验：无支撑块/地板实心/门高≥2/室内空心；支持 house/pool/generic 模式 | 生成后校验器 |
 | `voxel_render_iso` | 等距 ASCII 渲染，聊天内"看见"三维成果 | — |
 
 坐标约定与 probe.ps1 完全一致：切片行从上到下 z 递减、列 x 递增；三视图行 y/z 递减。
