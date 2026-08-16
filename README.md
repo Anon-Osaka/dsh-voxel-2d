@@ -4,7 +4,7 @@
 
 **工程范式落地**（实验的核心结论）：*二维是模型的推理画布，三维一致性必须交给代数兜底*——体素世界以逐层 2D 切片为状态，模型只做 2D 层编辑；堆叠、正交三视图投影、重力、跨视图一致性、不变量校验与自动修复全部由确定性代码完成。
 
-## 宿主工具（17 个 voxel_*）
+## 宿主工具（18 个 voxel_*）
 
 | 工具 | 作用 | 对应实验表示法 |
 |---|---|---|
@@ -13,12 +13,13 @@
 | `voxel_layer_get` / `voxel_layer_set` | 读/写单层 2D 网格（模型只编辑单层） | B · Y 层 2D 切片 |
 | `voxel_world_build` | 按 Y 层切片批量堆叠成 3D（JSON 或 yN: 文本） | B |
 | `voxel_code_map` | 把空间代码/伪代码（for/set/clear/fill/box）映射成体素世界并校验 | 代码 → A/B |
-| `voxel_code_export` | 把体素世界导出为空间代码（fill 盒合并或逐格 set） | A/B → 代码 |
+| `voxel_code_export` | 把体素世界导出为空间代码（fill 盒合并或逐格 set），未初始化总布置时被门禁拒绝 | A/B → 代码 |
 | `voxel_assembly_init` | 初始化 3D 装配总布置：坐标轴 + 组件包围盒 + 外壳/内脏分组 | 总布置 |
 | `voxel_interface_add` | 添加接口点（管路/粒子端点）并支持 peer 成对校验 | 接口点 |
 | `voxel_assembly_check` | 检查接口是否落在组件内、成对接口是否对齐、三视图是否可生成 | 装配检查 |
 | `voxel_cutaway` | 只剖 shell 组，保留 internal/external 组 | 剖切语义 |
 | `voxel_acceptance` | 按 3D 装配 DoD 输出验收清单 | 验收 |
+| `voxel_workflow_status` | 查看 3D 建模门禁状态与强制步骤 | 门禁 |
 | `voxel_export_coords` | 导出 [x,y,z] 坐标表 | A · 直接 3D 坐标 |
 | `voxel_project_views` | TOP/FRONT/SIDE 正交投影 + 跨视图一致性 + 门洞一致性 | C · 正交三视图 |
 | `voxel_gravity` | 列式物理：指定类型（缺省 sand）方块下落压实 | 实验阶段 3 |
@@ -45,6 +46,9 @@
 3. `voxel_assembly_check`：接口归属、成对对齐、三视图可生成
 4. `voxel_cutaway`：只剖外壳，内脏完整保留
 5. `voxel_acceptance`：输出 DoD 验收清单，不通过就不继续堆零件
+
+> 🔒 门禁：未调用 `voxel_assembly_init` 时，`voxel_code_export` 会拒绝导出模型代码，强制先走总布置/接口/验收流程。
+
 
 
 ## 构建与注入
