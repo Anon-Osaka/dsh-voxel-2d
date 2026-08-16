@@ -1,9 +1,12 @@
 /**
- * dsh-voxel-2d 鈥?浠ｇ爜鈫掍綋绱犳槧灏勩€? *
- * 鎻愪緵涓€涓瀬绠€鈥滅┖闂翠唬鐮佲€濊В閲婂櫒锛屾妸甯歌鐨勫潗鏍囧惊鐜?缃戞牸鎿嶄綔鐩存帴钀藉埌 VoxelWorld锛? * - for x in 0..4:  for z in 0..4:  set(x,0,z,stone)
+ * dsh-voxel-2d — 代码→体素映射。
+ *
+ * 提供一个极简“空间代码”解释器，把常见的坐标循环/网格操作直接落到 VoxelWorld：
+ * - for x in 0..4:  for z in 0..4:  set(x,0,z,stone)
  * - fill(0..4,0..0,0..4,stone)
  * - clear(x,y,z)
- * 鏀寔鍙橀噺銆佸洓鍒欒繍绠椼€佹嫭鍙枫€乺ange(a,b)锛堝崐寮€鍖洪棿锛変笌 a..b锛堥棴鍖洪棿锛夈€? */
+ * 支持变量、四则运算、括号、range(a,b)（半开区间）与 a..b（闭区间）。
+ */
 import { VoxelWorld } from './world.js'
 
 export interface CodeMapResult {
@@ -15,12 +18,12 @@ export interface CodeMapResult {
 
 function evalExpr(expr: string, vars: Record<string, number>): number {
   const tokens = expr.match(/\d+\.?\d*|[A-Za-z_]\w*|[+\-*/%()]/g) ?? []
-  if (tokens.length === 0) throw new Error('绌鸿〃杈惧紡: ' + expr)
+  if (tokens.length === 0) throw new Error('空表达式: ' + expr)
   let pos = 0
   const peek = (): string | undefined => tokens[pos]
   const next = (): string => {
     const t = tokens[pos]
-    if (t === undefined) throw new Error('琛ㄨ揪寮忔剰澶栫粨鏉? ' + expr)
+    if (t === undefined) throw new Error('表达式意外结束: ' + expr)
     pos++
     return t
   }
@@ -56,15 +59,15 @@ function evalExpr(expr: string, vars: Record<string, number>): number {
     const t = next()
     if (t === '(') {
       const v = parseExpr()
-      if (next() !== ')') throw new Error('缂哄彸鎷彿: ' + expr)
+      if (next() !== ')') throw new Error('缺右括号: ' + expr)
       return v
     }
     if (/^\d/.test(t)) return Number(t)
     if (/^[A-Za-z_]/.test(t)) {
-      if (!(t in vars)) throw new Error('鏈煡鍙橀噺: ' + t)
+      if (!(t in vars)) throw new Error('未知变量: ' + t)
       return vars[t]
     }
-    throw new Error('鏃犳硶瑙ｆ瀽鐨?token: ' + t)
+    throw new Error('无法解析的 token: ' + t)
   }
   return parseExpr()
 }
@@ -130,7 +133,7 @@ export function applySpatialCode(code: string, world: VoxelWorld): CodeMapResult
   const executeCommand = (content: string): void => {
     if (content.startsWith('set(')) {
       const a = splitArgs(content)
-      if (a.length < 3) throw new Error('set 闇€瑕?x,y,z[,type]: ' + content)
+      if (a.length < 3) throw new Error('set 需要 x,y,z[,type]: ' + content)
       const x = Math.floor(evalExpr(a[0], vars))
       const y = Math.floor(evalExpr(a[1], vars))
       const z = Math.floor(evalExpr(a[2], vars))
@@ -140,7 +143,7 @@ export function applySpatialCode(code: string, world: VoxelWorld): CodeMapResult
     }
     if (content.startsWith('clear(')) {
       const a = splitArgs(content)
-      if (a.length < 3) throw new Error('clear 闇€瑕?x,y,z: ' + content)
+      if (a.length < 3) throw new Error('clear 需要 x,y,z: ' + content)
       const x = Math.floor(evalExpr(a[0], vars))
       const y = Math.floor(evalExpr(a[1], vars))
       const z = Math.floor(evalExpr(a[2], vars))
@@ -149,7 +152,7 @@ export function applySpatialCode(code: string, world: VoxelWorld): CodeMapResult
     }
     if (content.startsWith('fill(') || content.startsWith('box(')) {
       const a = splitArgs(content)
-      if (a.length < 3) throw new Error('fill/box 闇€瑕?x,y,z 鑼冨洿[,type]: ' + content)
+      if (a.length < 3) throw new Error('fill/box 需要 x,y,z 范围[,type]: ' + content)
       const [x0, x1] = parseAxis(a[0], vars)
       const [y0, y1] = parseAxis(a[1], vars)
       const [z0, z1] = parseAxis(a[2], vars)
@@ -157,7 +160,7 @@ export function applySpatialCode(code: string, world: VoxelWorld): CodeMapResult
       for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) world.set(x, y, z, t)
       return
     }
-    throw new Error('鏈煡鍛戒护: ' + content)
+    throw new Error('未知命令: ' + content)
   }
 
   const execBlock = (blockLines: string[], indent: number): number => {
@@ -175,7 +178,7 @@ export function applySpatialCode(code: string, world: VoxelWorld): CodeMapResult
       if (content.startsWith('for ')) {
         const fm = /^for\s+([A-Za-z_]\w*)\s+in\s+(.+?):\s*$/.exec(content)
         if (!fm) {
-          errors.push('鏃犳硶瑙ｆ瀽 for: ' + content)
+          errors.push('无法解析 for: ' + content)
           i++
           continue
         }
@@ -224,7 +227,7 @@ function cellKey(x: number, y: number, z: number): string {
   return x + ',' + y + ',' + z
 }
 
-/** 浣撶礌涓栫晫 鈫?绌洪棿浠ｇ爜銆俿tyle=boxes 鏃剁敤 fill 鍚堝苟灏介噺澶х殑杞村榻愮洅锛屾洿绱у噾銆?*/
+/** 体素世界 → 空间代码。style=boxes 时用 fill 合并尽量大的轴对齐盒，更紧凑。 */
 export function exportSpatialCode(
   world: VoxelWorld,
   style: 'boxes' | 'blocks' = 'boxes',
@@ -267,7 +270,7 @@ export function exportSpatialCode(
         let grew = true
         while (grew) {
           grew = false
-          // 灏濊瘯 x 鏂瑰悜鎵╁睍
+          // 尝试 x 方向扩展
           if (x1 + 1 < W) {
             let ok = true
             for (let yy = y0; yy <= y1 && ok; yy++) for (let zz = z0; zz <= z1 && ok; zz++) {
@@ -318,7 +321,7 @@ export function exportSpatialCode(
         }
       }
       if (remaining.size > 0) {
-        // 鍏滃簳锛氫釜鍒湭鍚堝苟鐨勬牸瀛愰€愮偣杈撳嚭
+        // 兜底：个别未合并的格子逐点输出
         for (const k of remaining) {
           const [x, y, z] = k.split(',').map(Number)
           lines.push(`set(${x},${y},${z},${t})`)
