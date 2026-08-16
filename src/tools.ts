@@ -10,6 +10,7 @@ import {
   initAssembly, getAssembly, getActiveLayout, addComponent, addInterface, materializeLayout,
   checkLayout, applyCutaway, acceptance,
 } from './assembly.js'
+import { exportVoxelWebApp, exportCubeWebApp } from './web_export.js'
 
 type Summary = {
   name: string
@@ -627,6 +628,56 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
       }
     },
   }))
+
+  reg(defineTool({
+    name: 'voxel_export_webapp',
+    description: '把当前体素世界导出为可双击打开的独立 HTML + Three.js 单页 3D 查看器（自由旋转/滚轮缩放）。返回完整 HTML 源码，可直接写入 .html 文件。',
+    parameters: {
+      title: { type: 'string', description: '页面标题（缺省 Voxel Viewer）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          filename: { type: 'string' },
+          html: { type: 'string' },
+          blocks: { type: 'integer' },
+        },
+      },
+      render: (_args: unknown, value: { filename: string; html: string; blocks: number }) =>
+        [{ type: 'text', text: `已生成 ${value.filename}（${value.blocks} 块），HTML 长度 ${value.html.length} 字符。\n可直接将返回的 html 字段写入文件后双击打开。` }],
+    },
+    execute: async (args: { title?: string }) => {
+      const html = exportVoxelWebApp(mgr.getWorld(), args.title ?? 'Voxel Viewer')
+      return { filename: 'voxel-viewer.html', html, blocks: mgr.getWorld().count() }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_export_cube',
+    description: '导出 3×3 魔方单页应用骨架：Three.js 自由旋转、层转按钮、打乱/求解播放接口。返回完整 HTML 源码，可直接写入 .html 文件。',
+    parameters: {
+      title: { type: 'string', description: '页面标题（缺省 Rubik Cube 3x3）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          filename: { type: 'string' },
+          html: { type: 'string' },
+        },
+      },
+      render: (_args: unknown, value: { filename: string; html: string }) =>
+        [{ type: 'text', text: `已生成 ${value.filename}，HTML 长度 ${value.html.length} 字符。\n可直接将返回的 html 字段写入文件后双击打开。` }],
+    },
+    execute: async (args: { title?: string }) => {
+      const html = exportCubeWebApp(args.title ?? 'Rubik Cube 3x3')
+      return { filename: 'rubik-cube.html', html }
+    },
+  }))
+
 
 
 
