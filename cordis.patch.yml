@@ -1,0 +1,5 @@
+# dsh-voxel-2d bundle 层：插入插件行（恢复 profile 装配用）。
+- insert:
+    - id: dsh-voxel-2d
+      name: '@dsh-external/dsh-voxel-2d'
+      config: {}
