@@ -179,3 +179,103 @@ addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.up
 </body>
 </html>`
 }
+
+export function exportPbrWaterWebApp(title = 'PBR Water Scene'): string {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>body{margin:0;overflow:hidden;background:#0b0e14;color:#fff;font-family:ui-sans-serif,system-ui,sans-serif} #info{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.5);padding:8px 12px;border-radius:8px;font-size:13px} canvas{display:block}</style>
+</head>
+<body>
+<div id="info">🌊 ${title} · PBR 光照 / 水面反射 / 自由视角</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Reflector.js"><\/script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0e14);
+scene.fog = new THREE.Fog(0x0b0e14, 30, 80);
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(14, 8, 16);
+camera.lookAt(0, 1, 0);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// ── 灯光 ──
+const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x2a3a4a, 1.1);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2d0, 2.2);
+sun.position.set(12, 20, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun);
+const fill = new THREE.PointLight(0x88ccff, 0.8, 40);
+fill.position.set(-8, 6, -6);
+scene.add(fill);
+
+// ── 水面反射（Reflector 做平面反射，近似 SSR） ──
+const waterGeo = new THREE.PlaneGeometry(40, 40);
+const water = new THREE.Reflector(waterGeo, {
+  clipBias: 0.003,
+  textureWidth: 1024,
+  textureHeight: 1024,
+  color: 0x2a6f8f
+});
+water.rotation.x = -Math.PI / 2;
+water.position.y = 0;
+scene.add(water);
+
+// ── PBR 物体 ──
+const addPbr = (geo, color, metalness, roughness, x, y, z, scale=1) => {
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color, metalness, roughness, envMapIntensity:1}));
+  m.position.set(x, y, z);
+  m.scale.setScalar(scale);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
+};
+addPbr(new THREE.SphereGeometry(1.2, 64, 64), 0x8a7f6a, 0.1, 0.85, -4, 1.2, -3, 1.4);
+addPbr(new THREE.CylinderGeometry(1.4, 1.8, 2.4, 32), 0x6b5e4a, 0.05, 0.9, 0, 1.2, 0, 1);
+addPbr(new THREE.TorusKnotGeometry(0.9, 0.3, 128, 16), 0xc9a86a, 1.0, 0.25, 4, 2.2, 2, 0.8);
+addPbr(new THREE.BoxGeometry(1.6, 1.6, 1.6), 0x4a6fa5, 0.35, 0.6, 6, 0.8, -4, 1);
+
+// 水底网格/地面
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(30, 48),
+  new THREE.MeshStandardMaterial({color:0x1a2b33, roughness:0.95, metalness:0})
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.05;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0);
+controls.maxPolarAngle = Math.PI * 0.48;
+controls.enableDamping = true;
+controls.update();
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>`
+}
