@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — PBR 写实水面导出
+
+- 新增 `voxel_export_pbr_water`：导出 PBR 写实水面场景单页应用
+  - Three.js 光照 / ACES 色调映射 / 阴影
+  - Reflector 平面反射（近似 SSR）
+  - PBR 金属/粗糙度材质物体
+  - OrbitControls 自由视角
+- 插件现在可以参与“PBR 写实水面 / 光照 / SSR 效果”类 Web 交付物
+
 ## 0.8.0 — 网页导出能力
 
 - 新增 `voxel_export_webapp`：把当前体素世界导出为独立 HTML + Three.js 3D 查看器
