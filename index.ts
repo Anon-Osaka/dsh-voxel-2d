@@ -13,7 +13,7 @@ import z from 'schemastery'
 import type { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import type { WebServer, WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { VoxelWorld, DEMOS, BLOCK_COLORS } from './world.js'
+import { VoxelWorld, DEMOS, BLOCK_COLORS, TYPE_META } from './world.js'
 import { registerVoxelTools } from './tools.js'
 
 type AppContext = Context & {
@@ -138,7 +138,12 @@ export function apply(ctx: AppContext, config: Config): void {
         doorAgree: consistency.doorAgree === null ? null : consistency.doorAgree,
       },
       blocksList,
+      blocksTyped: w.blocksTyped(),
       palette: BLOCK_COLORS,
+      typeMeta: TYPE_META,
+      manifest: w.sceneManifest(),
+      waterBodies: w.waterBodies(),
+      lightAnchors: w.lightAnchors(),
       demos: Object.keys(DEMOS),
       worlds: [...worlds.keys()],
       currentWorld: currentName,

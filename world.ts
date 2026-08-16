@@ -51,6 +51,54 @@ export interface CheckResult {
   detail: string
 }
 
+export interface WaterMeta {
+  surfaceOffset: number
+  freeboard: number
+}
+
+export interface BlockTypeMeta {
+  category: 'solid' | 'liquid' | 'transparent' | 'emissive' | 'decor'
+  collidable: boolean
+  walkable: boolean
+  stepHeight?: number
+  emissive?: boolean
+  lightAnchor?: boolean
+  water?: WaterMeta
+}
+
+export interface WaterBody {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+  minZ: number
+  maxZ: number
+  surfaceY: number
+  floorY: number
+}
+
+export interface LightAnchor {
+  x: number
+  y: number
+  z: number
+  type: string
+}
+
+export interface SceneManifest {
+  units: 'm'
+  axes: { x: 'right'; y: 'up'; z: 'north' }
+  recommended: {
+    roomSize: number
+    ceilingY: number
+    wallThickness: number
+    doorWidth: number
+    doorHeight: number
+    waterSurfaceY: number
+    stepHeight: number
+    playerHeight: number
+  }
+}
+
 export interface ValidationReport {
   ok: boolean
   blocks: number
@@ -252,6 +300,77 @@ export class VoxelWorld {
     }
     out.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0])
     return out
+  }
+
+  /** 连通水体（按 6 邻域合并 water 块），附带水面/池底高度。 */
+  waterBodies(): WaterBody[] {
+    const visited = new Set<string>()
+    const bodies: WaterBody[] = []
+    const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]
+    for (const k of this.blocks.keys()) {
+      if (visited.has(k)) continue
+      const type = this.blocks.get(k) ?? null
+      if (!isLiquidType(type)) continue
+      const queue = [k]
+      visited.add(k)
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+      while (queue.length > 0) {
+        const cur = queue.pop()!
+        const p = cur.split(',').map(Number)
+        if (p[0] < minX) minX = p[0]
+        if (p[0] > maxX) maxX = p[0]
+        if (p[1] < minY) minY = p[1]
+        if (p[1] > maxY) maxY = p[1]
+        if (p[2] < minZ) minZ = p[2]
+        if (p[2] > maxZ) maxZ = p[2]
+        for (const d of dirs) {
+          const nk = keyOf(p[0] + d[0], p[1] + d[1], p[2] + d[2])
+          if (!visited.has(nk) && isLiquidType(this.blocks.get(nk) ?? null)) {
+            visited.add(nk)
+            queue.push(nk)
+          }
+        }
+      }
+      const waterMeta = getTypeMeta('water').water!
+      bodies.push({
+        minX, maxX, minY, maxY, minZ, maxZ,
+        surfaceY: maxY + waterMeta.surfaceOffset,
+        floorY: minY,
+      })
+    }
+    bodies.sort((a, b) => a.minY - b.minY || a.minX - b.minX || a.minZ - b.minZ)
+    return bodies
+  }
+
+  /** 灯位：所有 lightAnchor 类型的方块坐标。 */
+  lightAnchors(): LightAnchor[] {
+    const out: LightAnchor[] = []
+    for (const k of this.blocks.keys()) {
+      const type = this.blocks.get(k) ?? null
+      if (!isLightAnchor(type)) continue
+      const p = k.split(',').map(Number)
+      out.push({ x: p[0], y: p[1], z: p[2], type: type! })
+    }
+    out.sort((a, b) => a.y - b.y || a.x - b.x || a.z - b.z)
+    return out
+  }
+
+  /** 场景推荐配置：供外部渲染器/控制器统一读取，避免每个项目手工复制常量。 */
+  sceneManifest(): SceneManifest {
+    return {
+      units: 'm',
+      axes: { x: 'right', y: 'up', z: 'north' },
+      recommended: {
+        roomSize: 16,
+        ceilingY: 4,
+        wallThickness: 0.3,
+        doorWidth: 2,
+        doorHeight: 3,
+        waterSurfaceY: -0.35,
+        stepHeight: 0.35,
+        playerHeight: 1.7,
+      },
+    }
   }
 
   bbox(): { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } | null {
@@ -507,6 +626,7 @@ export class VoxelWorld {
    */
   validate(mode: boolean | string = false): ValidationReport {
     const house = mode === true || mode === 'house'
+    const pool = mode === 'pool'
     const { x: W, y: H, z: D } = this.size
     const b = this.bbox()
     const checks: CheckResult[] = []
@@ -599,10 +719,23 @@ export class VoxelWorld {
       }
     }
 
+    // pool 模式：水体深度必须有效（水面高于池底）
+    let waterDepthBad = 0
+    if (pool) {
+      for (const w of this.waterBodies()) {
+        if (w.surfaceY <= w.floorY) waterDepthBad++
+      }
+      checks.push({
+        name: '水体深度有效',
+        pass: waterDepthBad === 0,
+        detail: waterDepthBad === 0 ? '所有水体 surfaceY > floorY' : waterDepthBad + ' 处水体深度异常（水面不高于池底）',
+      })
+    }
+
     // 总体判定：以「地板实心 + 门高 + 室内空心」为准（论文结论：最终以
     // 室内地板实心率+门窗特征为准）；悬空指标两种模式都仅作参考
     // （屋顶横跨空心室内、楼梯台阶等合法悬空都会误报）。
-    const ok = floorHoles === 0 && doorGap1 === 0 && interiorFill === 0
+    const ok = floorHoles === 0 && doorGap1 === 0 && interiorFill === 0 && (!pool || waterDepthBad === 0)
     return {
       ok,
       blocks: this.count(),
@@ -784,10 +917,82 @@ export const BLOCK_COLORS: Record<string, string> = {
   fill: '#b9c4c2',
   pool_floor: '#c8e8ee',
   pool_edge: '#d7e8ea',
+  lamp: '#fff2b0',
   default: '#9aa3ad',
 }
 
 export function blockColor(type: string | null): string {
   if (!type) return '#00000000'
   return BLOCK_COLORS[type] ?? BLOCK_COLORS.default
+}
+
+/** 方块类型元数据：给外部渲染器/控制器提供语义，而不是让每个项目猜。 */
+export const TYPE_META: Record<string, BlockTypeMeta> = {
+  water: {
+    category: 'liquid',
+    collidable: false,
+    walkable: false,
+    water: { surfaceOffset: -0.35, freeboard: 0.35 },
+  },
+  tile: {
+    category: 'solid',
+    collidable: true,
+    walkable: true,
+    stepHeight: 0.35,
+  },
+  wall: {
+    category: 'solid',
+    collidable: true,
+    walkable: false,
+  },
+  ceiling: {
+    category: 'solid',
+    collidable: false,
+    walkable: false,
+  },
+  foundation: {
+    category: 'solid',
+    collidable: true,
+    walkable: true,
+    stepHeight: 0.35,
+  },
+  fill: {
+    category: 'solid',
+    collidable: true,
+    walkable: true,
+    stepHeight: 0.35,
+  },
+  pool_floor: {
+    category: 'solid',
+    collidable: true,
+    walkable: true,
+    stepHeight: 0.35,
+  },
+  pool_edge: {
+    category: 'solid',
+    collidable: true,
+    walkable: true,
+    stepHeight: 0.35,
+  },
+  lamp: {
+    category: 'emissive',
+    collidable: false,
+    walkable: false,
+    emissive: true,
+    lightAnchor: true,
+  },
+  default: {
+    category: 'solid',
+    collidable: true,
+    walkable: true,
+    stepHeight: 0.35,
+  },
+}
+
+export function getTypeMeta(type: string | null): BlockTypeMeta {
+  return (type && TYPE_META[type]) || TYPE_META.default
+}
+
+export function isLightAnchor(type: string | null): boolean {
+  return !!type && !!TYPE_META[type]?.lightAnchor
 }

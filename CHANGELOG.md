@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — 场景语义层（TYPE_META / WaterBodies / Manifest）
+
+- 新增 `BlockTypeMeta` / `TYPE_META`：
+  - `solid` / `liquid` / `transparent` / `emissive` / `decor`
+  - `collidable`、`walkable`、`stepHeight`
+  - `lightAnchor`、`water.surfaceOffset`、`water.freeboard`
+- 新增 `VoxelWorld.waterBodies()`：按 6 邻域合并连通水体，输出水面/池底高度
+- 新增 `VoxelWorld.lightAnchors()`：导出灯位锚点
+- 新增 `VoxelWorld.sceneManifest()`：推荐渲染常量（净高/门洞/墙厚/水面/步高/玩家身高）
+- `validate(mode='pool')` 新增“水体深度有效”检查
+- `/api/state` 增加 `typeMeta`、`manifest`、`waterBodies`、`lightAnchors`、`blocksTyped`
+- 新增工具 `voxel_scene_manifest`
+- 调色板新增 `lamp`
+
 ## 0.6.1 — Poolrooms / 水体场景优化
 
 - 新增 `LIQUID_TYPES` / `isLiquidType()`：

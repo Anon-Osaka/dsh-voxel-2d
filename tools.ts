@@ -925,5 +925,34 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
     },
   }))
 
+  reg(defineTool({
+    name: 'voxel_scene_manifest',
+    description: '导出当前世界的场景清单：带类型方块、连通水体、灯位锚点、推荐渲染常量。外部渲染器/玩家控制器可直接消费，避免重复猜测语义。',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          blocks: { type: 'integer' },
+          waterBodies: { type: 'integer' },
+          lightAnchors: { type: 'integer' },
+          manifest: { type: 'json' },
+        },
+      },
+      render: (_args: unknown, value: { blocks: number; waterBodies: number; lightAnchors: number; manifest: unknown }) =>
+        [{ type: 'text', text: '场景清单:\n- 方块: ' + value.blocks + '\n- 水体: ' + value.waterBodies + '\n- 灯位: ' + value.lightAnchors + '\n- manifest: ' + JSON.stringify(value.manifest) }],
+    },
+    execute: async () => {
+      const w = mgr.getWorld()
+      return {
+        blocks: w.blocksTyped().length,
+        waterBodies: w.waterBodies().length,
+        lightAnchors: w.lightAnchors().length,
+        manifest: w.sceneManifest(),
+      }
+    },
+  }))
+
   return disposers
 }
