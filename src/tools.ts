@@ -6,6 +6,10 @@
 import { defineTool, type ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { VoxelWorld, DEMOS, parseGridRow } from './world.js'
 import { applySpatialCode, exportSpatialCode } from './code_space.js'
+import {
+  initAssembly, getAssembly, addComponent, addInterface, materializeLayout,
+  checkLayout, applyCutaway, acceptance,
+} from './assembly.js'
 
 type Summary = {
   name: string
@@ -401,6 +405,197 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
       return { code: r.code, commands: r.commands, blocks: r.blocks, summary: summarize(world) }
     },
   }))
+
+  reg(defineTool({
+    name: 'voxel_assembly_init',
+    description: '初始化 3D 装配体总布置：定义坐标轴语义、组件包围盒（含外壳/内脏分组），并把组件以体素盒形式写入当前世界。组件用 JSON 数组传入：[{name,x,y,z,w,h,d,group}]，group 为 shell/internal/external。',
+    parameters: {
+      name: { type: 'string', required: true, description: '布局名（如 diesel-engine）' },
+      axes: { type: 'string', required: true, description: '坐标轴说明（如 "Y=气缸轴线 X=曲轴 +Z=前方"）' },
+      components: { type: 'json', description: '组件数组 JSON：[{name,x,y,z,w,h,d,group}]' },
+      reset: { type: 'boolean', description: '是否先清空世界（缺省 true）' },
+      size: { type: 'integer', description: '可选：把世界重置为 size³（4..64）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          layout: { type: 'string' },
+          placed: { type: 'integer' },
+          components: { type: 'integer' },
+          summary: SUMMARY_SCHEMA,
+        },
+      },
+      render: (_args: unknown, value: { layout: string; placed: number; components: number; summary: Summary }) =>
+        [{ type: 'text', text: `总布置「${value.layout}」已初始化：${value.components} 个组件，体素化 ${value.placed} 块\n` + renderSummary(value.summary) }],
+    },
+    execute: async (args: { name: string; axes: string; components?: unknown; reset?: boolean; size?: number }) => {
+      const world = mgr.getWorld()
+      if (args.reset !== false) world.clear()
+      if (args.size !== undefined) {
+        const s = Math.max(4, Math.min(64, Math.floor(args.size)))
+        world.resize(s, s, s)
+      }
+      const layout = initAssembly(args.name, args.axes)
+      const comps = typeof args.components === 'string' ? JSON.parse(args.components) : (args.components ?? [])
+      if (!Array.isArray(comps)) throw new Error('components 必须是数组')
+      for (const c of comps) {
+        addComponent(layout, {
+          name: String(c.name),
+          x: Math.floor(Number(c.x)),
+          y: Math.floor(Number(c.y)),
+          z: Math.floor(Number(c.z)),
+          w: Math.max(1, Math.floor(Number(c.w))),
+          h: Math.max(1, Math.floor(Number(c.h))),
+          d: Math.max(1, Math.floor(Number(c.d))),
+          group: c.group === 'internal' ? 'internal' : c.group === 'external' ? 'external' : 'shell',
+        })
+      }
+      const placed = materializeLayout(layout, world)
+      return { layout: layout.name, placed, components: Object.keys(layout.components).length, summary: summarize(world) }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_interface_add',
+    description: '向装配布局添加接口点：用于定义管路/粒子路径端点必须落在哪个组件 bbox 内，并可指定 peer 进行成对接齐校验。',
+    parameters: {
+      layout: { type: 'string', required: true, description: '布局名' },
+      name: { type: 'string', required: true, description: '接口点名称（如 exhaust_start）' },
+      component: { type: 'string', required: true, description: '所属组件名' },
+      x: { type: 'integer', required: true },
+      y: { type: 'integer', required: true },
+      z: { type: 'integer', required: true },
+      peer: { type: 'string', description: '应连接的另一个接口点名称' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          layout: { type: 'string' },
+          interface: { type: 'string' },
+          interfaces: { type: 'integer' },
+        },
+      },
+      render: (_args: unknown, value: { layout: string; interface: string; interfaces: number }) =>
+        [{ type: 'text', text: `布局「${value.layout}」已添加接口 ${value.interface}（共 ${value.interfaces} 个）` }],
+    },
+    execute: async (args: { layout: string; name: string; component: string; x: number; y: number; z: number; peer?: string }) => {
+      const layout = getAssembly(args.layout)
+      if (!layout) throw new Error('未知布局: ' + args.layout)
+      addInterface(layout, { name: args.name, component: args.component, point: [args.x, args.y, args.z], peer: args.peer })
+      return { layout: layout.name, interface: args.name, interfaces: Object.keys(layout.interfaces).length }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_assembly_check',
+    description: '检查装配布局：接口点是否落在组件 bbox 内、成对接口是否对齐、三视图是否可生成。返回检查清单。',
+    parameters: {
+      layout: { type: 'string', required: true, description: '布局名' },
+      tolerance: { type: 'integer', description: '接口对齐容差（缺省 1）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean' },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { name: { type: 'string' }, pass: { type: 'boolean' }, detail: { type: 'string' } },
+            },
+          },
+          componentCount: { type: 'integer' },
+          interfaceCount: { type: 'integer' },
+        },
+      },
+      render: (_args: unknown, value: {
+        ok: boolean; items: Array<{ name: string; pass: boolean; detail: string }>; componentCount: number; interfaceCount: number
+      }) => {
+        const lines = value.items.map((i) => (i.pass ? '✓ ' : '✗ ') + i.name + '：' + i.detail)
+        return [{ type: 'text', text: (value.ok ? '✅ 装配检查通过' : '❌ 装配检查未通过') + `（${value.componentCount} 组件 / ${value.interfaceCount} 接口）\n` + lines.join('\n') }]
+      },
+    },
+    execute: async (args: { layout: string; tolerance?: number }) => {
+      const layout = getAssembly(args.layout)
+      if (!layout) throw new Error('未知布局: ' + args.layout)
+      const r = checkLayout(layout, mgr.getWorld(), args.tolerance ?? 1)
+      return { ok: r.ok, items: r.items, componentCount: r.componentCount, interfaceCount: r.interfaceCount }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_cutaway',
+    description: '按装配布局执行剖切：只移除 shell 组在剖切面一侧的体素，internal/external 组全部保留。axis=x/y/z，position 为剖切坐标。',
+    parameters: {
+      layout: { type: 'string', required: true, description: '布局名' },
+      axis: { type: 'string', required: true, description: 'x | y | z' },
+      position: { type: 'integer', required: true, description: '剖切面位置' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          removed: { type: 'integer' },
+          remaining: { type: 'integer' },
+          detail: { type: 'string' },
+          summary: SUMMARY_SCHEMA,
+        },
+      },
+      render: (_args: unknown, value: { removed: number; remaining: number; detail: string; summary: Summary }) =>
+        [{ type: 'text', text: value.detail + '\n' + renderSummary(value.summary) }],
+    },
+    execute: async (args: { layout: string; axis: string; position: number }) => {
+      const layout = getAssembly(args.layout)
+      if (!layout) throw new Error('未知布局: ' + args.layout)
+      const axis = args.axis === 'x' ? 'x' : args.axis === 'z' ? 'z' : 'y'
+      const r = applyCutaway(layout, mgr.getWorld(), axis, args.position)
+      return { removed: r.removed, remaining: r.remaining, detail: r.detail, summary: summarize(mgr.getWorld()) }
+    },
+  }))
+
+  reg(defineTool({
+    name: 'voxel_acceptance',
+    description: '按 3D 装配体 Definition of Done 输出验收清单：总布置/接口/外壳内脏分组/三视图/装配检查。',
+    parameters: {
+      layout: { type: 'string', required: true, description: '布局名' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean' },
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { name: { type: 'string' }, pass: { type: 'boolean' }, detail: { type: 'string' } },
+            },
+          },
+        },
+      },
+      render: (_args: unknown, value: { ok: boolean; items: Array<{ name: string; pass: boolean; detail: string }> }) => {
+        const lines = value.items.map((i) => (i.pass ? '✓ ' : '✗ ') + i.name + '：' + i.detail)
+        return [{ type: 'text', text: (value.ok ? '✅ 验收通过' : '❌ 验收未通过') + '\n' + lines.join('\n') }]
+      },
+    },
+    execute: async (args: { layout: string }) => {
+      const layout = getAssembly(args.layout)
+      if (!layout) throw new Error('未知布局: ' + args.layout)
+      const r = acceptance(layout, mgr.getWorld())
+      return { ok: r.ok, items: r.items }
+    },
+  }))
+
 
 
 
