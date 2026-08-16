@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-voxel-2d",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "体素三维转二维视觉工作台：Y层切片编辑/三视图投影/重力/一致性校验 + 粒子化建模渲染工作流（精细模→体素化→三转二检查→素体→再精细→比对迭代）",
   "private": true,
   "type": "module",
