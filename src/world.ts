@@ -79,6 +79,12 @@ export interface Mutation {
 
 const DEFAULT_TYPE = 'stone'
 const MUTATION_CAP = 20000
+/** 非固体/液体类型：不参与支撑、室内填充、自动补支撑。 */
+export const LIQUID_TYPES = new Set(['water'])
+
+export function isLiquidType(type: string | null): boolean {
+  return !!type && LIQUID_TYPES.has(type)
+}
 
 function keyOf(x: number, y: number, z: number): string {
   return x + ',' + y + ',' + z
@@ -232,6 +238,17 @@ export class VoxelWorld {
     for (const k of this.blocks.keys()) {
       const p = k.split(',').map(Number)
       out.push([p[0], p[1], p[2]])
+    }
+    out.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0])
+    return out
+  }
+
+  /** 带类型的全量导出：`[x, y, z, type]`，供渲染器直接使用。 */
+  blocksTyped(): Array<[number, number, number, string]> {
+    const out: Array<[number, number, number, string]> = []
+    for (const k of this.blocks.keys()) {
+      const p = k.split(',').map(Number)
+      out.push([p[0], p[1], p[2], this.blocks.get(k) ?? DEFAULT_TYPE])
     }
     out.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0])
     return out
@@ -488,7 +505,8 @@ export class VoxelWorld {
    * - 室内填充（interiorFill，house 模式）：占地内部（非边缘）在地板与
    *   最高层之间的填充（"实心"缺陷，需清空）。
    */
-  validate(house = false): ValidationReport {
+  validate(mode: boolean | string = false): ValidationReport {
+    const house = mode === true || mode === 'house'
     const { x: W, y: H, z: D } = this.size
     const b = this.bbox()
     const checks: CheckResult[] = []
@@ -501,9 +519,11 @@ export class VoxelWorld {
     const interiorSamples: string[] = []
     let interiorFill = 0
 
-    // 无支撑块
+    // 无支撑块（液体/水不参与）
     for (const k of this.blocks.keys()) {
       const p = k.split(',').map(Number)
+      const type = this.blocks.get(k) ?? null
+      if (isLiquidType(type)) continue
       if (p[1] > 0 && !this.blocks.has(keyOf(p[0], p[1] - 1, p[2]))) {
         floating++
         if (floatingSamples.length < 8) floatingSamples.push(k)
@@ -563,7 +583,8 @@ export class VoxelWorld {
           for (let x = 0; x < W; x++) {
             for (let z = 0; z < D; z++) {
               if (!isInterior(x, z)) continue
-              if (this.blocks.has(keyOf(x, y, z))) {
+              const type = this.blocks.get(keyOf(x, y, z))
+              if (type && !isLiquidType(type)) {
                 interiorFill++
                 if (interiorSamples.length < 8) interiorSamples.push(x + ',' + y + ',' + z)
               }
@@ -610,6 +631,15 @@ export class VoxelWorld {
       for (const f of foot) {
         const p = f.split(',').map(Number)
         if (!this.blocks.has(keyOf(p[0], b.minY, p[1]))) {
+          // Skip water basins: never auto-fill a column that contains liquid.
+          let hasLiquid = false
+          for (let y = b.minY; y <= b.maxY; y++) {
+            if (isLiquidType(this.blocks.get(keyOf(p[0], y, p[1])) ?? null)) {
+              hasLiquid = true
+              break
+            }
+          }
+          if (hasLiquid) continue
           this.set(p[0], b.minY, p[1], type)
           floorN++
         }
@@ -635,7 +665,8 @@ export class VoxelWorld {
       for (let x = 0; x < this.size.x; x++) {
         for (let z = 0; z < this.size.z; z++) {
           for (let y = 1; y < this.size.y; y++) {
-            if (!this.blocks.has(keyOf(x, y, z))) continue
+            const type = this.blocks.get(keyOf(x, y, z))
+            if (!type || isLiquidType(type)) continue
             if (this.blocks.has(keyOf(x, y - 1, z))) continue
             // 悬空：向下补一列直到地面或已有支撑
             let yy = y - 1
@@ -744,10 +775,19 @@ export const BLOCK_COLORS: Record<string, string> = {
   leaves: '#5f9e4f',
   roof: '#7a5a9e',
   coal: '#3a3f45',
+  // Poolrooms / 水体场景常用类型
+  water: '#3aa7c8',
+  tile: '#e8efee',
+  wall: '#f4faf9',
+  ceiling: '#e8efee',
+  foundation: '#cfd8d6',
+  fill: '#b9c4c2',
+  pool_floor: '#c8e8ee',
+  pool_edge: '#d7e8ea',
   default: '#9aa3ad',
 }
 
 export function blockColor(type: string | null): string {
-  if (!type) return '#666'
+  if (!type) return '#00000000'
   return BLOCK_COLORS[type] ?? BLOCK_COLORS.default
 }
