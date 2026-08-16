@@ -251,7 +251,8 @@ export function apply(ctx: AppContext, config: Config): void {
               return send(res, 200, { ok: true, moved, state: stateOf() })
             }
             if (path === 'validate') {
-              const report = world().validate(body.house !== false)
+              const mode = (body.mode as 'house' | 'pool' | 'generic' | undefined) ?? (body.house === false ? 'generic' : 'house')
+              const report = world().validate(mode)
               let fixes: string[] = []
               let before = world().count()
               let after = world().count()
@@ -262,7 +263,7 @@ export function apply(ctx: AppContext, config: Config): void {
                 after = r.after
                 if (r.after !== r.before) {
                   // 修复后重跑校验，返回最新报告
-                  return send(res, 200, { ok: true, report: world().validate(body.house !== false), fixes, before, after, state: stateOf() })
+                  return send(res, 200, { ok: true, report: world().validate(mode as 'house' | 'pool' | 'generic'), fixes, before, after, state: stateOf() })
                 }
               }
               return send(res, 200, { ok: true, report, fixes, before, after, state: stateOf() })
