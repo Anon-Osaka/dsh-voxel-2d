@@ -5,6 +5,7 @@
  */
 import { defineTool, type ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { VoxelWorld, DEMOS, parseGridRow } from './world.js'
+import { applySpatialCode } from './code_space.js'
 
 type Summary = {
   name: string
@@ -306,6 +307,72 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
       return { imported, layers: parsed.length, summary: summarize(world) }
     },
   }))
+
+  reg(defineTool({
+    name: 'voxel_code_map',
+    description: '把空间代码/伪代码映射到体素世界：支持 for x in 0..4: 嵌套循环、set(x,y,z[,type])、clear(x,y,z)、fill(x0..x1,y0..y1,z0..z1[,type])/box(...)。reset=true 时先清空世界；size 可重设世界尺寸。执行后返回操作数、块数变化、错误列表与校验摘要。',
+    parameters: {
+      code: { type: 'string', required: true, description: '空间代码/伪代码（Python 风格缩进循环 + set/clear/fill/box）' },
+      reset: { type: 'boolean', description: '是否先清空世界（缺省 true）' },
+      size: { type: 'integer', description: '可选：应用前把世界重置为 size³（4..64）' },
+      validate: { type: 'boolean', description: '是否执行不变量校验（缺省 true）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ops: { type: 'integer' },
+          before: { type: 'integer' },
+          after: { type: 'integer' },
+          errors: { type: 'array', items: { type: 'string' } },
+          ok: { type: 'boolean' },
+          checks: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: { name: { type: 'string' }, pass: { type: 'boolean' }, detail: { type: 'string' } },
+            },
+          },
+          summary: SUMMARY_SCHEMA,
+        },
+      },
+      render: (_args: unknown, value: {
+        ops: number; before: number; after: number; errors: string[]; ok: boolean
+        checks: Array<{ name: string; pass: boolean; detail: string }>; summary: Summary
+      }) => {
+        const lines = [
+          `代码映射完成：${value.ops} 个命令，${value.before} → ${value.after} 块`,
+          `校验：${value.ok ? '✅ 通过' : '❌ 存在缺陷'}`,
+          ...value.checks.map((c) => (c.pass ? '✓ ' : '✗ ') + c.name + '：' + c.detail),
+        ]
+        if (value.errors.length > 0) lines.push('解析/执行错误:\n' + value.errors.map((e) => '  - ' + e).join('\n'))
+        lines.push(renderSummary(value.summary))
+        return [{ type: 'text', text: lines.join('\n') }]
+      },
+    },
+    execute: async (args: { code: string; reset?: boolean; size?: number; validate?: boolean }) => {
+      const world = mgr.getWorld()
+      if (args.reset !== false) world.clear()
+      if (args.size !== undefined) {
+        const s = Math.max(4, Math.min(64, Math.floor(args.size)))
+        world.resize(s, s, s)
+      }
+      const r = applySpatialCode(args.code, world)
+      const report = args.validate === false ? null : world.validate(false)
+      return {
+        ops: r.ops,
+        before: r.before,
+        after: r.after,
+        errors: r.errors,
+        ok: report ? report.ok : true,
+        checks: report ? report.checks : [],
+        summary: summarize(world),
+      }
+    },
+  }))
+
 
   reg(defineTool({
     name: 'voxel_export_coords',
