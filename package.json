@@ -1,7 +1,7 @@
 {
   "name": "@dsh-external/dsh-voxel-2d",
-  "version": "0.3.0",
-  "description": "体素三维转二维视觉工作台：Y层切片编辑/三视图投影/重力/一致性校验 + 粒子化建模渲染工作流（精细模→体素化→三转二检查→素体→再精细→比对迭代）",
+  "version": "0.4.0",
+  "description": "体素三维转二维视觉工作台 + 代码↔体素空间推理：Y层切片/三视图投影/重力/一致性校验 + voxel_code_map/voxel_code_export",
   "private": true,
   "type": "module",
   "main": "./lib/index.js",
@@ -15,43 +15,27 @@
     "@deepseek-ai/dsh-llm": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-tools": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-host-webserver": ">=0.0.1-rc <2",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc <2",
     "cordis": ">=4.0.0-rc <5",
     "schemastery": "^3.18.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
-    "@types/three": "^0.180.0",
-    "three": "^0.180.0",
-    "typescript": "^5.9.0",
-    "tsdown": "^0.22.14"
+    "typescript": "^5.9.0"
   },
   "scripts": {
     "build": "bash scripts/build.sh",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:client": "tsdown"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./client": {
-      "types": "./lib/types/client/index.d.ts",
-      "default": "./lib/client.js"
-    },
     "./package.json": "./package.json"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-slots"
-      ],
-      "platform": "web"
     }
   }
 }
