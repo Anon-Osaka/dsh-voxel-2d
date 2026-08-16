@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-voxel-2d",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "体素三维转二维视觉工作台 + 代码↔体素空间推理：Y层切片/三视图投影/重力/一致性校验 + voxel_code_map/voxel_code_export",
   "private": true,
   "type": "module",
