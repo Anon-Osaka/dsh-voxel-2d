@@ -758,9 +758,10 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
 
   reg(defineTool({
     name: 'voxel_validate',
-    description: '确定性不变量校验（生成后校验器）：无支撑块（悬空）、地板实心（占地区内最低层缺块=环形地板缺陷）、门高≥2（house 模式）、室内空心（house 模式）。autoFix=true 时自动修复：补地板 → 补门高 → 补支撑，无需重新生成。',
+    description: '确定性不变量校验（生成后校验器）：无支撑块（悬空）、地板实心（占地区内最低层缺块=环形地板缺陷）、门高≥2（house 模式）、室内空心（house 模式）。mode=pool 时水体不参与支撑/室内填充判定。autoFix=true 时自动修复：补地板 → 补门高 → 补支撑，无需重新生成。',
     parameters: {
-      house: { type: 'boolean', description: '按小屋语义检查门高与室内空心（缺省 true）' },
+      house: { type: 'boolean', description: '按小屋语义检查门高与室内空心（缺省 true，兼容旧调用）' },
+      mode: { type: 'string', enum: ['house', 'pool', 'generic'], description: '校验模式：house=小屋语义；pool=水体场景；generic=仅基础不变量（缺省 house）' },
       autoFix: { type: 'boolean', description: '校验后自动修复（缺省 false）' },
     },
     output: {
@@ -792,10 +793,10 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
         return [{ type: 'text', text: (value.ok ? '✅ 全部通过' : '❌ 存在缺陷') + '（' + value.blocks + ' 块）\n' + lines.join('\n') }]
       },
     },
-    execute: async (args: { house?: boolean; autoFix?: boolean }) => {
+    execute: async (args: { house?: boolean; mode?: 'house' | 'pool' | 'generic'; autoFix?: boolean }) => {
       const world = mgr.getWorld()
-      const house = args.house !== false
-      const report = world.validate(house)
+      const mode = args.mode ?? (args.house === false ? 'generic' : 'house')
+      const report = world.validate(mode)
       let fixes: string[] = []
       let before = world.count()
       let after = world.count()
@@ -806,7 +807,7 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
         after = r.after
         if (r.after !== r.before) {
           // 修复后重跑校验，反映最新状态
-          const again = world.validate(house)
+          const again = world.validate(mode)
           return {
             ok: again.ok,
             blocks: again.blocks,
