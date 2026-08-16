@@ -36,15 +36,25 @@ export interface AssemblyLayout {
 }
 
 const layouts = new Map<string, AssemblyLayout>()
+let activeLayoutName: string | null = null
 
 export function initAssembly(name: string, axes: string): AssemblyLayout {
   const layout: AssemblyLayout = { name, axes, components: {}, interfaces: {} }
   layouts.set(name, layout)
+  activeLayoutName = name
   return layout
 }
 
 export function getAssembly(name: string): AssemblyLayout | undefined {
   return layouts.get(name)
+}
+
+export function getActiveLayout(): AssemblyLayout | undefined {
+  return activeLayoutName ? layouts.get(activeLayoutName) : undefined
+}
+
+export function getActiveLayoutName(): string | null {
+  return activeLayoutName
 }
 
 export function addComponent(layout: AssemblyLayout, comp: AssemblyComponent): void {
