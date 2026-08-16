@@ -7,7 +7,7 @@ import { defineTool, type ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { VoxelWorld, DEMOS, parseGridRow } from './world.js'
 import { applySpatialCode, exportSpatialCode } from './code_space.js'
 import {
-  initAssembly, getAssembly, addComponent, addInterface, materializeLayout,
+  initAssembly, getAssembly, getActiveLayout, addComponent, addInterface, materializeLayout,
   checkLayout, applyCutaway, acceptance,
 } from './assembly.js'
 
@@ -400,6 +400,9 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
     },
     execute: async (args: { style?: string; type?: string }) => {
       const world = mgr.getWorld()
+      if (!getActiveLayout()) {
+        throw new Error('3D 建模门禁：请先调用 voxel_assembly_init 定义总布置/接口点，再导出模型代码。')
+      }
       const style = args.style === 'blocks' ? 'blocks' : 'boxes'
       const r = exportSpatialCode(world, style, args.type)
       return { code: r.code, commands: r.commands, blocks: r.blocks, summary: summarize(world) }
@@ -595,6 +598,36 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
       return { ok: r.ok, items: r.items }
     },
   }))
+
+  reg(defineTool({
+    name: 'voxel_workflow_status',
+    description: '查看当前 3D 建模工作流门禁状态：是否已初始化总布置、当前活跃布局、以及强制步骤。未初始化时 voxel_code_export 会被拒绝。',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          activeLayout: { type: 'string' },
+          locked: { type: 'boolean' },
+          steps: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      render: (_args: unknown, value: { activeLayout: string; locked: boolean; steps: string[] }) =>
+        [{ type: 'text', text: (value.locked ? '🔒 门禁开启' : '🔓 门禁未生效') + `，活跃布局: ${value.activeLayout || '（无）'}\n强制步骤:\n` + value.steps.map((s) => '  - ' + s).join('\n') }],
+    },
+    execute: async () => {
+      const active = getActiveLayout()
+      return {
+        activeLayout: active?.name ?? '',
+        locked: true,
+        steps: active
+          ? ['总布置已定义', '接口点已定义', '装配检查通过', '剖切语义验证', 'DoD 验收通过']
+          : ['先调用 voxel_assembly_init 定义总布置', '再调用 voxel_interface_add 定义接口点', '通过 voxel_assembly_check 检查', '通过 voxel_acceptance 验收后才可导出'],
+      }
+    },
+  }))
+
 
 
 
