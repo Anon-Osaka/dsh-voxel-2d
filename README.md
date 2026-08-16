@@ -4,7 +4,7 @@
 
 **工程范式落地**（实验的核心结论）：*二维是模型的推理画布，三维一致性必须交给代数兜底*——体素世界以逐层 2D 切片为状态，模型只做 2D 层编辑；堆叠、正交三视图投影、重力、跨视图一致性、不变量校验与自动修复全部由确定性代码完成。
 
-## 宿主工具（18 个 voxel_*）
+## 宿主工具（20 个 voxel_*）
 
 | 工具 | 作用 | 对应实验表示法 |
 |---|---|---|
@@ -20,6 +20,8 @@
 | `voxel_cutaway` | 只剖 shell 组，保留 internal/external 组 | 剖切语义 |
 | `voxel_acceptance` | 按 3D 装配 DoD 输出验收清单 | 验收 |
 | `voxel_workflow_status` | 查看 3D 建模门禁状态与强制步骤 | 门禁 |
+| `voxel_export_webapp` | 把当前体素世界导出为独立 HTML+Three.js 3D 查看器 | 网页导出 |
+| `voxel_export_cube` | 导出 3×3 魔方单页应用骨架（旋转/层转/求解播放接口） | 网页导出 |
 | `voxel_export_coords` | 导出 [x,y,z] 坐标表 | A · 直接 3D 坐标 |
 | `voxel_project_views` | TOP/FRONT/SIDE 正交投影 + 跨视图一致性 + 门洞一致性 | C · 正交三视图 |
 | `voxel_gravity` | 列式物理：指定类型（缺省 sand）方块下落压实 | 实验阶段 3 |
@@ -48,6 +50,14 @@
 5. `voxel_acceptance`：输出 DoD 验收清单，不通过就不继续堆零件
 
 > 🔒 门禁：未调用 `voxel_assembly_init` 时，`voxel_code_export` 会拒绝导出模型代码，强制先走总布置/接口/验收流程。
+
+## 网页导出能力
+
+- `voxel_export_webapp`：把当前体素世界导出为独立 HTML + Three.js 单页查看器
+- `voxel_export_cube`：导出 3×3 魔方网页应用骨架（自由旋转、层转按钮、打乱/求解播放接口）
+
+这样遇到“网页魔方 / 3D 展示 / 单页 Web 应用”类需求时，插件也能直接产出可双击打开的 `.html` 交付物，不需要绕过插件。
+
 
 
 
