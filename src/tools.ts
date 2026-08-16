@@ -10,7 +10,7 @@ import {
   initAssembly, getAssembly, getActiveLayout, addComponent, addInterface, materializeLayout,
   checkLayout, applyCutaway, acceptance,
 } from './assembly.js'
-import { exportVoxelWebApp, exportCubeWebApp } from './web_export.js'
+import { exportVoxelWebApp, exportCubeWebApp, exportPbrWaterWebApp } from './web_export.js'
 
 type Summary = {
   name: string
@@ -677,6 +677,31 @@ export function registerVoxelTools(tools: ToolRuntime, mgr: WorldManager): Array
       return { filename: 'rubik-cube.html', html }
     },
   }))
+
+  reg(defineTool({
+    name: 'voxel_export_pbr_water',
+    description: '导出 PBR 写实水面场景单页应用：Three.js 光照 / 水面反射（Reflector 近似 SSR）/ 自由视角。返回完整 HTML 源码，可直接写入 .html 文件。',
+    parameters: {
+      title: { type: 'string', description: '页面标题（缺省 PBR Water Scene）' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          filename: { type: 'string' },
+          html: { type: 'string' },
+        },
+      },
+      render: (_args: unknown, value: { filename: string; html: string }) =>
+        [{ type: 'text', text: `已生成 ${value.filename}，HTML 长度 ${value.html.length} 字符。\n可直接将返回的 html 字段写入文件后双击打开。` }],
+    },
+    execute: async (args: { title?: string }) => {
+      const html = exportPbrWaterWebApp(args.title ?? 'PBR Water Scene')
+      return { filename: 'pbr-water-scene.html', html }
+    },
+  }))
+
 
 
 
