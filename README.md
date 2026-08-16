@@ -1,6 +1,6 @@
-# @dsh-external/dsh-voxel-2d — 体素三维转二维视觉工作台 + 粒子化建模工作流
+# @dsh-external/dsh-voxel-2d — 体素三维转二维视觉工作台 + 代码↔体素空间推理
 
-以 [yjh051108/voxel-3d-to-2d](https://github.com/yjh051108/voxel-3d-to-2d)（《压缩三维为二维：大语言模型体素空间推理的实证研究》）为基准的 DSH 混合形态插件。
+以 [yjh051108/voxel-3d-to-2d](https://github.com/yjh051108/voxel-3d-to-2d)（《压缩三维为二维：大语言模型体素空间推理的实证研究》）为基准的 DSH 宿主插件（无 Web 可视化面板，保留全部建模/空间推理逻辑）。
 
 **工程范式落地**（实验的核心结论）：*二维是模型的推理画布，三维一致性必须交给代数兜底*——体素世界以逐层 2D 切片为状态，模型只做 2D 层编辑；堆叠、正交三视图投影、重力、跨视图一致性、不变量校验与自动修复全部由确定性代码完成。
 
@@ -22,22 +22,19 @@
 
 坐标约定与 probe.ps1 完全一致：切片行从上到下 z 递减、列 x 递增；三视图行 y/z 递减。
 
-## 粒子化建模面板（conversation.view）
+## 建模逻辑（保留，无 UI）
 
-- **5 阶段管线**：粒子采样 → 扩散 → 模糊云 → 云停留呼吸 → 网格凝固（SDF MarchingCubes）；
-- **模糊云是终态**：不聚焦，模糊完成后停留并带 ±7% 呼吸浮动；
-- **艺术风格策略**：写实 / 像素复古 / 黏土手办 / 水彩手绘，运行时可切换；
-- **工作流按钮**：
-  - `体素化并检查`：精细模 SDF → 体素 → 写入宿主世界 → 三转二校验；
-  - `修复为素体`：调用宿主 `autoFix` 补地板/门高/支撑；
-  - `素体→精细模`：把当前素体方块读回并叠加显示体素精细模；
-  - `比对`：统计初始体素与当前素体的一致/差异块数，指导继续迭代。
+- 代码 → 体素：`voxel_code_map`
+- 体素 → 代码：`voxel_code_export`
+- 三转二理解：`voxel_project_views` / `voxel_validate` / `voxel_gravity`
+- 多世界工作流：`voxel_world_switch` / `voxel_export_region`
+
+> Web 可视化面板已移除；以上逻辑全部通过宿主工具使用，不消耗前端渲染性能。
 
 ## 构建与注入
 
 ```bash
 DSH_CHECKOUT=<dsh 源码 checkout> bash scripts/build.sh   # host: tsc → lib/
-npm run build:client                                     # client: tsdown → lib/client.js
 ```
 
 注入器环境内：`dev_build_plugin <本目录>` → `dev_inject_plugin <本目录>`；
