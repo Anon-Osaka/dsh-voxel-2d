@@ -4,7 +4,7 @@
 
 **工程范式落地**（实验的核心结论）：*二维是模型的推理画布，三维一致性必须交给代数兜底*——体素世界以逐层 2D 切片为状态，模型只做 2D 层编辑；堆叠、正交三视图投影、重力、跨视图一致性、不变量校验与自动修复全部由确定性代码完成。
 
-## 宿主工具（12 个 voxel_*）
+## 宿主工具（17 个 voxel_*）
 
 | 工具 | 作用 | 对应实验表示法 |
 |---|---|---|
@@ -14,6 +14,11 @@
 | `voxel_world_build` | 按 Y 层切片批量堆叠成 3D（JSON 或 yN: 文本） | B |
 | `voxel_code_map` | 把空间代码/伪代码（for/set/clear/fill/box）映射成体素世界并校验 | 代码 → A/B |
 | `voxel_code_export` | 把体素世界导出为空间代码（fill 盒合并或逐格 set） | A/B → 代码 |
+| `voxel_assembly_init` | 初始化 3D 装配总布置：坐标轴 + 组件包围盒 + 外壳/内脏分组 | 总布置 |
+| `voxel_interface_add` | 添加接口点（管路/粒子端点）并支持 peer 成对校验 | 接口点 |
+| `voxel_assembly_check` | 检查接口是否落在组件内、成对接口是否对齐、三视图是否可生成 | 装配检查 |
+| `voxel_cutaway` | 只剖 shell 组，保留 internal/external 组 | 剖切语义 |
+| `voxel_acceptance` | 按 3D 装配 DoD 输出验收清单 | 验收 |
 | `voxel_export_coords` | 导出 [x,y,z] 坐标表 | A · 直接 3D 坐标 |
 | `voxel_project_views` | TOP/FRONT/SIDE 正交投影 + 跨视图一致性 + 门洞一致性 | C · 正交三视图 |
 | `voxel_gravity` | 列式物理：指定类型（缺省 sand）方块下落压实 | 实验阶段 3 |
@@ -30,6 +35,17 @@
 - 多世界工作流：`voxel_world_switch` / `voxel_export_region`
 
 > Web 可视化面板已移除；以上逻辑全部通过宿主工具使用，不消耗前端渲染性能。
+
+## 3D 装配工作流（DoD 已固化）
+
+按“先总布置 → 再接口点 → 后几何 → 先验收 → 再堆细节”的顺序执行：
+
+1. `voxel_assembly_init`：定义坐标系、组件 bbox、外壳/内脏分组
+2. `voxel_interface_add`：把管路/粒子端点钉在组件接口点上
+3. `voxel_assembly_check`：接口归属、成对对齐、三视图可生成
+4. `voxel_cutaway`：只剖外壳，内脏完整保留
+5. `voxel_acceptance`：输出 DoD 验收清单，不通过就不继续堆零件
+
 
 ## 构建与注入
 
